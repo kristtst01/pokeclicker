@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!assets|plattforms|sprites|maps|music|sounds|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

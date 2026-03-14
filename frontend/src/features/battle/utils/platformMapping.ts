@@ -45,6 +45,5 @@ export function getPlatformImage(types: string[]): string {
   };
 
   const platformType = typeToPlatform[primaryType] || 'grass';
-  // Note: /project2/ is the base path configured in vite.config.ts
-  return `/project2/plattforms/${platformType}.webp`;
+  return `/plattforms/${platformType}.webp`;
 }
