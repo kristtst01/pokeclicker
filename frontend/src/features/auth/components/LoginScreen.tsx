@@ -178,11 +178,11 @@ export function LoginScreen({onNavigate, isDarkMode}: Props) {
         muted
         playsInline
         className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
-        poster="/project2/loginBackground.webp"
+        poster="/loginBackground.webp"
         onError={() => console.error('Video failed to load')}
         aria-label="Background video"
       >
-        <source src="/project2/loginBackgroundVideo.mp4" type="video/mp4" />
+        <source src="/loginBackgroundVideo.mp4" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
 
