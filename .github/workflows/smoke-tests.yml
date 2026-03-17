@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, feat/*]
+    branches: [main, develop, feat/*, migrate/*]
   pull_request:
     branches: [main, develop]
 
@@ -24,30 +24,33 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install pnpm
+        run: npm install -g pnpm
+
       - name: Install dependencies
-        run: npm install
+        run: pnpm install
 
       - name: Check Prettier formatting
         run: |
-          cd frontend && npm run format:check
-          cd ../backend && npm run format:check
+          cd frontend && pnpm run format:check
+          cd ../backend && pnpm run format:check
 
       - name: Run ESLint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Build project
-        run: npm run build
+        run: pnpm run build
 
       - name: Run frontend unit tests
-        run: npm run test:run
+        run: pnpm run test:run
         working-directory: ./frontend
 
       - name: Run backend unit tests
-        run: npm run test:run
+        run: pnpm run test:run
         working-directory: ./backend
 
       - name: Install Playwright Browsers
-        run: npx playwright install chromium
+        run: pnpm exec playwright install chromium
 
       - name: Find available port and start backend server
         run: |
@@ -56,7 +59,7 @@ jobs:
           echo "BACKEND_PORT=$PORT" >> $GITHUB_ENV
 
           cd backend
-          PORT=$PORT npm run start &
+          PORT=$PORT pnpm run start &
           sleep 5
           curl --retry 10 --retry-delay 1 --retry-connrefused "http://localhost:$PORT/?query=%7Bhealth%7Bstatus%7D%7D"
         env:
@@ -69,7 +72,7 @@ jobs:
       # Smoke tests temporarily disabled due to CI environment issues with onboarding modal
       # TODO: Re-enable once onboarding modal blocking issue is resolved in CI
       # - name: Run smoke tests
-      #   run: npx playwright test smoke.spec.ts --project=chromium
+      #   run: pnpm exec playwright test smoke.spec.ts --project=chromium
 
       - uses: actions/upload-artifact@v4
         if: failure()
