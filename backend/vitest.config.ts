@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    env: {
+      JWT_SECRET: 'test_secret_for_ci',
+    },
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
     exclude: ['dist/**', 'node_modules/**'],
     coverage: {
