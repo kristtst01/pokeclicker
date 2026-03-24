@@ -70,10 +70,14 @@ export function useCandySync({
   useEffect(() => {
     if (!user) return;
 
-    const nextValue = String(user.rare_candy ?? '0');
+    const serverCandy = String(user.rare_candy ?? '0');
+    // Preserve any candy earned since the last flush started.  The server
+    // value already includes everything we successfully synced; any remaining
+    // unsyncedAmount was added while the mutation was in flight and still
+    // needs to be flushed.
+    const pending = unsyncedAmountRef.current;
+    const nextValue = toDecimal(serverCandy).plus(pending).toString();
     setLocalRareCandy(nextValue);
-    setUnsyncedAmount('0');
-    unsyncedAmountRef.current = '0';
 
     // Defer event emission to avoid updating other components during render
     // This prevents "Cannot update a component while rendering a different component" error
