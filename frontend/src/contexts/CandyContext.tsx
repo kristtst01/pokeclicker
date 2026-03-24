@@ -33,9 +33,10 @@ export function CandyProvider({
   children,
   isOnboarding = false,
 }: CandyProviderProps) {
-  const {user, isAuthenticated, updateUser, registerBeforeLogout} = useAuth();
+  const {user, isAuthenticated, registerBeforeLogout} = useAuth();
 
-  // Global candy sync system (same as clicker used locally)
+  // Global candy sync system — localRareCandy is the source of truth during
+  // the session.  Server state is only loaded on login (user._id change).
   const {
     localRareCandy,
     displayError,
@@ -46,7 +47,6 @@ export function CandyProvider({
   } = useCandySync({
     user,
     isAuthenticated,
-    updateUser,
   });
 
   // Keep a ref to the latest flush so the before-logout callback always

@@ -196,8 +196,8 @@ describe('CandyContext', () => {
         await result.current.flushPendingCandy();
       });
 
-      // Should have called backend mutation
-      expect(mockUpdateRareCandy).toHaveBeenCalledWith('25', mockUpdateUser);
+      // Should have called backend mutation (no updateUser — localRareCandy is source of truth)
+      expect(mockUpdateRareCandy).toHaveBeenCalledWith('25');
     });
   });
 
@@ -229,18 +229,18 @@ describe('CandyContext', () => {
   });
 
   describe('integration with auth context', () => {
-    it('should sync with user candy changes', () => {
+    it('should NOT reset local candy when user object changes (same user)', () => {
       const {result, rerender} = renderHook(() => useCandyContext(), {wrapper});
 
       expect(result.current.localRareCandy).toBe('100');
 
-      // Update user candy
+      // Update user candy (same _id) — localRareCandy is source of truth during session
       mockAuth.user = {...mockUser, rare_candy: '200'};
 
       rerender();
 
-      // Should reflect new candy amount
-      expect(result.current.localRareCandy).toBe('200');
+      // Should NOT change — only resets on user._id change (login/logout)
+      expect(result.current.localRareCandy).toBe('100');
     });
 
     it('should handle user logout', () => {

@@ -9,46 +9,36 @@ import {emitCandyUpdate} from '@/lib/candyEvents';
 interface UseCandySyncProps {
   user: User | null;
   isAuthenticated: boolean;
-  updateUser: (user: User) => void;
 }
 
 /**
  * Manages local candy state with time-based batched server syncing
  * Implements optimistic updates with automatic retry on failure
  *
+ * Architecture:
+ * - localRareCandy is the SOURCE OF TRUTH for display during a session
+ * - It is only reset from the server on login (user._id changes)
+ * - All mutations (flush, purchases, upgrades, catches) may update the user
+ *   object in AuthContext, but those changes do NOT reset localRareCandy
+ * - This eliminates race conditions where in-flight mutations overwrite
+ *   candy earned between the flush start and the server response
+ *
  * Sync strategy:
- * - Maintains local candy count that updates immediately (optimistic)
  * - Accumulates changes in unsyncedAmount buffer
  * - Flushes to server when:
  *   1. Time threshold reached (default: 30 seconds after first candy addition)
  *   2. Component unmounts (navigating away from clicker page)
- *   3. Manual flush before upgrades (to ensure sufficient candy)
+ *   3. Manual flush before upgrades/purchases (to ensure sufficient candy)
  *   4. Before logout (via registerBeforeLogout in CandyProvider)
  *
  * Persistence:
  * - On page refresh/close, unsynced amount is saved to localStorage
- * - On next mount for the same user, the pending amount is recovered and re-queued
- *
- * Error handling:
- * - If sync fails, adds amount back to unsynced buffer
- * - Automatically retries on next flush trigger
- * - Shows temporary error message to user
- *
- * Why time-based batching?
- * - Predictable sync intervals prevent rate limiting
- * - Reduces server load (max 2 requests/minute)
- * - Improves performance (no waiting for server on each click)
- * - Prevents race conditions with rapid clicking and autoclicker
+ * - On next mount for the same user, the pending amount is recovered
  *
  * @param user - Current authenticated user
  * @param isAuthenticated - Must be true to sync candy to server
- * @param updateUser - Callback to update user context after successful sync
  */
-export function useCandySync({
-  user,
-  isAuthenticated,
-  updateUser,
-}: UseCandySyncProps) {
+export function useCandySync({user, isAuthenticated}: UseCandySyncProps) {
   const {updateRareCandy} = useGameMutations();
 
   const [localRareCandy, setLocalRareCandy] = useState(
@@ -66,44 +56,35 @@ export function useCandySync({
     userIdRef.current = user?._id;
   }, [user?._id]);
 
-  // Reset local state whenever the server user object changes (e.g. after updateUser calls)
+  // Reset local candy state ONLY on login/logout (when user identity changes).
+  // Other user object updates (from mutations like catchPokemon, purchasePokemon,
+  // upgradeStat, etc.) do NOT reset localRareCandy — it is the source of truth
+  // during a session and is only modified via addCandy/deductCandy.
+  //
+  // Also recovers any pending candy saved to localStorage before a page refresh.
   useEffect(() => {
-    if (!user) return;
+    if (!user?._id) return;
 
     const serverCandy = String(user.rare_candy ?? '0');
-    // Preserve any candy earned since the last flush started.  The server
-    // value already includes everything we successfully synced; any remaining
-    // unsyncedAmount was added while the mutation was in flight and still
-    // needs to be flushed.
-    const pending = unsyncedAmountRef.current;
-    const nextValue = toDecimal(serverCandy).plus(pending).toString();
+    setUnsyncedAmount('0');
+    unsyncedAmountRef.current = '0';
+
+    // Check for pending candy saved before a page refresh
+    const key = `pendingCandy_${user._id}`;
+    const saved = localStorage.getItem(key);
+    let nextValue = serverCandy;
+    if (saved && toDecimal(saved).gt(0)) {
+      localStorage.removeItem(key);
+      setUnsyncedAmount(saved);
+      unsyncedAmountRef.current = saved;
+      nextValue = toDecimal(serverCandy).plus(saved).toString();
+    }
+
     setLocalRareCandy(nextValue);
 
-    // Defer event emission to avoid updating other components during render
-    // This prevents "Cannot update a component while rendering a different component" error
     queueMicrotask(() => {
       emitCandyUpdate(nextValue);
     });
-  }, [user]);
-
-  // Recover any candy that was pending when the page was refreshed/closed.
-  // This effect intentionally runs AFTER the user reset effect above so the
-  // pending amount is added on top of the freshly-reset DB value.
-  useEffect(() => {
-    if (!user?._id) return;
-    const key = `pendingCandy_${user._id}`;
-    const pending = localStorage.getItem(key);
-    if (pending && toDecimal(pending).gt(0)) {
-      localStorage.removeItem(key);
-      setUnsyncedAmount(pending);
-      unsyncedAmountRef.current = pending;
-      setLocalRareCandy((prev) => {
-        const next = toDecimal(prev).plus(pending).toString();
-        queueMicrotask(() => emitCandyUpdate(next));
-        return next;
-      });
-    }
-    // Only run when the user ID changes (i.e. a different user logs in or initial load)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]);
 
@@ -122,8 +103,10 @@ export function useCandySync({
   }, []);
 
   /**
-   * Flushes accumulated candy changes to the server
-   * Called automatically by triggers or manually before upgrades
+   * Flushes accumulated candy changes to the server.
+   * Does NOT call updateUser — localRareCandy already reflects the correct
+   * amount, and updating the user object would be redundant at best and
+   * trigger stale-state overwrites at worst.
    */
   const flushPendingCandy = useCallback(async () => {
     if (toDecimal(unsyncedAmount).eq(0) || !isAuthenticated) return;
@@ -141,7 +124,7 @@ export function useCandySync({
     }
 
     try {
-      await updateRareCandy(amountToSync, updateUser);
+      await updateRareCandy(amountToSync);
       // Clear any persisted pending candy for this user (covers the refresh-recovery case)
       if (userIdRef.current) {
         localStorage.removeItem(`pendingCandy_${userIdRef.current}`);
@@ -160,7 +143,7 @@ export function useCandySync({
         GameConfig.clicker.errorDisplayDuration
       );
     }
-  }, [unsyncedAmount, isAuthenticated, updateRareCandy, updateUser]);
+  }, [unsyncedAmount, isAuthenticated, updateRareCandy]);
 
   // Auto-flush effect: Time-based batching only (no click threshold)
   // Timer starts when first candy is added, flushes after time threshold

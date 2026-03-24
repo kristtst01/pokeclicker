@@ -184,10 +184,7 @@ describe('useCandySync', () => {
       });
 
       // Flush should have been called after timer expires
-      expect(mockUpdateRareCandy).toHaveBeenCalledWith(
-        '10',
-        mockProps.updateUser
-      );
+      expect(mockUpdateRareCandy).toHaveBeenCalledWith('10');
     });
 
     it('should cancel timer on manual flush', async () => {
@@ -285,10 +282,7 @@ describe('useCandySync', () => {
         await result.current.flushPendingCandy();
       });
 
-      expect(mockUpdateRareCandy).toHaveBeenCalledWith(
-        '6',
-        mockProps.updateUser
-      );
+      expect(mockUpdateRareCandy).toHaveBeenCalledWith('6');
       expect(result.current.localRareCandy).toBe('106');
       expect(result.current.unsyncedAmount).toBe('0');
     });

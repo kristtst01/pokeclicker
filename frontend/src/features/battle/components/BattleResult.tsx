@@ -96,15 +96,9 @@ export function BattleResult({
 
   useEffect(() => {
     if (isNewCatch) {
-      // Flush pending candy first so the DB has the battle reward before catchPokemon
-      // returns a user object. Without this, updateUser would overwrite localRareCandy
-      // with the pre-reward DB value and the reward would be lost.
-      flushPendingCandy()
-        .then(() =>
-          catchPokemon({
-            variables: {pokemonId: opponentPokemon.id},
-          })
-        )
+      catchPokemon({
+        variables: {pokemonId: opponentPokemon.id},
+      })
         .then((result) => {
           // Update auth context with new owned_pokemon_ids to ensure Pokedex Bonus updates
           if (result.data?.catchPokemon) {
@@ -116,13 +110,7 @@ export function BattleResult({
           setCatchError('Failed to add Pokemon to Pokedex');
         });
     }
-  }, [
-    isNewCatch,
-    opponentPokemon.id,
-    catchPokemon,
-    updateUser,
-    flushPendingCandy,
-  ]);
+  }, [isNewCatch, opponentPokemon.id, catchPokemon, updateUser]);
 
   const handlePlayWithPokemon = useCallback(async () => {
     setIsSettingPokemon(true);
