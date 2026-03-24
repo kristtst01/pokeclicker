@@ -60,6 +60,7 @@ const mockAuth = {
   login: vi.fn(),
   logout: vi.fn(),
   updateUser: mockUpdateUser,
+  registerBeforeLogout: vi.fn(() => vi.fn()),
 };
 
 vi.mock('@features/auth', () => ({

@@ -1,4 +1,4 @@
-import {useState, useEffect, type ReactNode} from 'react';
+import {useState, useEffect, useRef, useCallback, type ReactNode} from 'react';
 import {logger} from '@/lib/logger';
 import {apolloClient} from '@/lib/apolloClient';
 import {AuthContext} from './AuthContextDefinition';
@@ -22,6 +22,14 @@ import {DELETE_USER_MUTATION} from '@/lib/graphql/mutations';
 export function AuthProvider({children}: {children: ReactNode}) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const beforeLogoutCallbacks = useRef<Set<() => Promise<void>>>(new Set());
+
+  const registerBeforeLogout = useCallback((cb: () => Promise<void>) => {
+    beforeLogoutCallbacks.current.add(cb);
+    return () => {
+      beforeLogoutCallbacks.current.delete(cb);
+    };
+  }, []);
 
   // Restore authentication state from localStorage on mount
   useEffect(() => {
@@ -77,6 +85,12 @@ export function AuthProvider({children}: {children: ReactNode}) {
   };
 
   const logout = async (clearOnboarding = false) => {
+    // Flush any pending game state (e.g. unsynced candy) before clearing the token,
+    // so mutations still have a valid auth header when they fire.
+    await Promise.allSettled(
+      [...beforeLogoutCallbacks.current].map((cb) => cb())
+    );
+
     // Store username before clearing user state (needed to clear onboarding flag)
     const username = user?.username;
     const isGuest =
@@ -117,7 +131,15 @@ export function AuthProvider({children}: {children: ReactNode}) {
 
   return (
     <AuthContext.Provider
-      value={{user, token, login, logout, updateUser, isAuthenticated: !!token}}
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        updateUser,
+        isAuthenticated: !!token,
+        registerBeforeLogout,
+      }}
     >
       {children}
     </AuthContext.Provider>

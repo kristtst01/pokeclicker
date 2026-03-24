@@ -17,7 +17,7 @@
  * - Syncs to backend every 30 seconds or on unmount
  * - Before purchases/upgrades, flushes pending candy to ensure backend has accurate amount
  */
-import {type ReactNode} from 'react';
+import {type ReactNode, useEffect, useRef} from 'react';
 import {useAuth} from '@features/auth';
 import {useCandySync} from '@features/clicker/hooks/useCandySync';
 import {useAutoclicker} from '@features/clicker/hooks/useAutoclicker';
@@ -33,7 +33,7 @@ export function CandyProvider({
   children,
   isOnboarding = false,
 }: CandyProviderProps) {
-  const {user, isAuthenticated, updateUser} = useAuth();
+  const {user, isAuthenticated, updateUser, registerBeforeLogout} = useAuth();
 
   // Global candy sync system (same as clicker used locally)
   const {
@@ -48,6 +48,19 @@ export function CandyProvider({
     isAuthenticated,
     updateUser,
   });
+
+  // Keep a ref to the latest flush so the before-logout callback always
+  // calls the current closure without needing to re-register on every render.
+  const flushRef = useRef(flushPendingCandy);
+  useEffect(() => {
+    flushRef.current = flushPendingCandy;
+  }, [flushPendingCandy]);
+
+  // Flush pending candy before logout clears the auth token, so the
+  // updateRareCandy mutation still has a valid Authorization header.
+  useEffect(() => {
+    return registerBeforeLogout(() => flushRef.current());
+  }, [registerBeforeLogout]);
 
   // Global autoclicker (runs on all pages)
   useAutoclicker({

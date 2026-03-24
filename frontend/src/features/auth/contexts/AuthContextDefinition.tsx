@@ -18,6 +18,8 @@ interface AuthContextType {
   updateUser: (user: User) => void;
   /** Convenience flag indicating if a user is currently authenticated */
   isAuthenticated: boolean;
+  /** Register a callback to be awaited before logout clears the token. Returns an unregister function. */
+  registerBeforeLogout: (cb: () => Promise<void>) => () => void;
 }
 
 /**
