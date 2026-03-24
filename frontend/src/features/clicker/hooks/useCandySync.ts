@@ -23,6 +23,11 @@ interface UseCandySyncProps {
  *   1. Time threshold reached (default: 30 seconds after first candy addition)
  *   2. Component unmounts (navigating away from clicker page)
  *   3. Manual flush before upgrades (to ensure sufficient candy)
+ *   4. Before logout (via registerBeforeLogout in CandyProvider)
+ *
+ * Persistence:
+ * - On page refresh/close, unsynced amount is saved to localStorage
+ * - On next mount for the same user, the pending amount is recovered and re-queued
  *
  * Error handling:
  * - If sync fails, adds amount back to unsynced buffer
@@ -55,6 +60,13 @@ export function useCandySync({
   const lastSyncRef = useRef<number>(Date.now());
   const [displayError, setDisplayError] = useState<string | null>(null);
 
+  // Track current user ID via ref so beforeunload handler always has the latest value
+  const userIdRef = useRef<string | undefined>(user?._id);
+  useEffect(() => {
+    userIdRef.current = user?._id;
+  }, [user?._id]);
+
+  // Reset local state whenever the server user object changes (e.g. after updateUser calls)
   useEffect(() => {
     if (!user) return;
 
@@ -69,6 +81,41 @@ export function useCandySync({
       emitCandyUpdate(nextValue);
     });
   }, [user]);
+
+  // Recover any candy that was pending when the page was refreshed/closed.
+  // This effect intentionally runs AFTER the user reset effect above so the
+  // pending amount is added on top of the freshly-reset DB value.
+  useEffect(() => {
+    if (!user?._id) return;
+    const key = `pendingCandy_${user._id}`;
+    const pending = localStorage.getItem(key);
+    if (pending && toDecimal(pending).gt(0)) {
+      localStorage.removeItem(key);
+      setUnsyncedAmount(pending);
+      unsyncedAmountRef.current = pending;
+      setLocalRareCandy((prev) => {
+        const next = toDecimal(prev).plus(pending).toString();
+        queueMicrotask(() => emitCandyUpdate(next));
+        return next;
+      });
+    }
+    // Only run when the user ID changes (i.e. a different user logs in or initial load)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id]);
+
+  // On page refresh or close, save any unsynced candy to localStorage so it
+  // can be recovered on the next session for the same user.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const userId = userIdRef.current;
+      const pending = unsyncedAmountRef.current;
+      if (userId && toDecimal(pending).gt(0)) {
+        localStorage.setItem(`pendingCandy_${userId}`, pending);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   /**
    * Flushes accumulated candy changes to the server
@@ -91,6 +138,10 @@ export function useCandySync({
 
     try {
       await updateRareCandy(amountToSync, updateUser);
+      // Clear any persisted pending candy for this user (covers the refresh-recovery case)
+      if (userIdRef.current) {
+        localStorage.removeItem(`pendingCandy_${userIdRef.current}`);
+      }
     } catch (err) {
       // On failure, add the amount back to unsynced buffer for retry
       logger.logError(err, 'SyncCandy');
